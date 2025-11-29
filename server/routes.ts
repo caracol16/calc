@@ -1,8 +1,10 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import { robotoBase64 } from "./fonts/roboto-font";
+import { robotoBoldBase64 } from "./fonts/roboto-bold-font";
 
 interface Task {
   id: string;
@@ -58,46 +60,56 @@ export async function registerRoutes(
     try {
       const { tasks, summary } = req.body as ExportRequest;
       
+      if (!summary || !summary.tasks || !Array.isArray(summary.tasks)) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      
       const doc = new jsPDF();
+      
+      doc.addFileToVFS("Roboto-Regular.ttf", robotoBase64);
+      doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+      doc.addFileToVFS("Roboto-Bold.ttf", robotoBoldBase64);
+      doc.addFont("Roboto-Bold.ttf", "Roboto", "bold");
+      doc.setFont("Roboto", "normal");
+      
       const pageWidth = doc.internal.pageSize.getWidth();
       
-      doc.setFont("helvetica", "bold");
       doc.setFontSize(18);
-      doc.text("Calculation of translation costs", pageWidth / 2, 20, { align: "center" });
+      doc.text("Расчет стоимости перевода", pageWidth / 2, 20, { align: "center" });
       
-      doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
-      doc.text(`Date: ${new Date().toLocaleDateString("ru-RU")}`, 14, 30);
+      doc.text(`Дата: ${new Date().toLocaleDateString("ru-RU")}`, 14, 30);
       
       let yPos = 40;
       
       summary.tasks.forEach((calc, index) => {
-        doc.setFont("helvetica", "bold");
         doc.setFontSize(12);
-        doc.text(`${calc.task.name}`, 14, yPos);
+        doc.text(calc.task.name, 14, yPos);
         yPos += 8;
         
         const tableData = [
-          ["New words", formatInteger(calc.task.newWords)],
-          ["Repeats", formatInteger(calc.task.repeats)],
-          ["Cross-file repeats", formatInteger(calc.task.crossFileRepeats)],
-          ["Total words", formatInteger(calc.totalWords)],
-          ["Cost per word", `${formatNumber(calc.task.costPerWord)} RUB`],
-          ["Repeat discount", `${calc.task.repeatDiscount}% (${formatNumber(calc.costPerRepeat)} RUB)`],
-          ["Words per day", formatInteger(calc.task.wordsPerDay)],
-          ["New words cost", `${formatNumber(calc.newWordsCost)} RUB`],
-          ["Repeats cost", `${formatNumber(calc.repeatCost)} RUB`],
-          ["Total cost", `${formatNumber(calc.totalCost)} RUB`],
-          ["Deadline", calc.requiresIndividualQuote ? "Individual calculation" : `${calc.estimatedDays} days`],
+          ["Новых слов", formatInteger(calc.task.newWords)],
+          ["Повторов", formatInteger(calc.task.repeats)],
+          ["Повторов через файл", formatInteger(calc.task.crossFileRepeats)],
+          ["Всего слов", formatInteger(calc.totalWords)],
+          ["Стоимость за слово", `${formatNumber(calc.task.costPerWord)} руб.`],
+          ["Скидка на повторы", `${calc.task.repeatDiscount}% (${formatNumber(calc.costPerRepeat)} руб.)`],
+          ["Слов в день", formatInteger(calc.task.wordsPerDay)],
+          ["Стоимость новых слов", `${formatNumber(calc.newWordsCost)} руб.`],
+          ["Стоимость повторов", `${formatNumber(calc.repeatCost)} руб.`],
+          ["Итоговая стоимость", `${formatNumber(calc.totalCost)} руб.`],
+          ["Сроки", calc.requiresIndividualQuote ? "Рассчитывается индивидуально" : `${calc.estimatedDays} дней`],
         ];
         
         autoTable(doc, {
           startY: yPos,
-          head: [["Parameter", "Value"]],
+          head: [["Параметр", "Значение"]],
           body: tableData,
           theme: "striped",
-          headStyles: { fillColor: [59, 130, 246] },
+          headStyles: { fillColor: [59, 130, 246], font: "Roboto", fontStyle: "bold" },
+          bodyStyles: { font: "Roboto", fontStyle: "normal" },
           margin: { left: 14, right: 14 },
+          styles: { font: "Roboto" },
         });
         
         yPos = (doc as any).lastAutoTable.finalY + 15;
@@ -114,40 +126,40 @@ export async function registerRoutes(
           yPos = 20;
         }
         
-        doc.setFont("helvetica", "bold");
         doc.setFontSize(14);
-        doc.text("Summary", 14, yPos);
+        doc.text("Общий итог", 14, yPos);
         yPos += 8;
         
         const summaryTableData = summary.tasks.map((calc) => [
           calc.task.name,
           formatInteger(calc.totalWords),
-          `${formatNumber(calc.totalCost)} RUB`,
-          calc.requiresIndividualQuote ? "Indiv." : `${calc.estimatedDays} d.`,
+          `${formatNumber(calc.totalCost)} руб.`,
+          calc.requiresIndividualQuote ? "Индивид." : `${calc.estimatedDays} дн.`,
         ]);
         
         summaryTableData.push([
-          "TOTAL",
+          "ИТОГО",
           formatInteger(summary.totalWords),
-          `${formatNumber(summary.grandTotal)} RUB`,
+          `${formatNumber(summary.grandTotal)} руб.`,
           "",
         ]);
         
         autoTable(doc, {
           startY: yPos,
-          head: [["Task", "Words", "Cost", "Deadline"]],
+          head: [["Задание", "Слов", "Стоимость", "Сроки"]],
           body: summaryTableData,
           theme: "striped",
-          headStyles: { fillColor: [59, 130, 246] },
+          headStyles: { fillColor: [59, 130, 246], font: "Roboto", fontStyle: "bold" },
+          bodyStyles: { font: "Roboto", fontStyle: "normal" },
           margin: { left: 14, right: 14 },
-          foot: [],
+          styles: { font: "Roboto" },
         });
       }
       
       const pdfBuffer = doc.output("arraybuffer");
       
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", 'attachment; filename="translation-calculation.pdf"');
+      res.setHeader("Content-Disposition", 'attachment; filename="raschet-perevoda.pdf"');
       res.send(Buffer.from(pdfBuffer));
     } catch (error) {
       console.error("PDF export error:", error);
@@ -159,61 +171,65 @@ export async function registerRoutes(
     try {
       const { tasks, summary } = req.body as ExportRequest;
       
+      if (!summary || !summary.tasks || !Array.isArray(summary.tasks)) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      
       const workbook = XLSX.utils.book_new();
       
       summary.tasks.forEach((calc, index) => {
         const wsData = [
           [calc.task.name],
           [],
-          ["Parameter", "Value"],
-          ["New words", calc.task.newWords],
-          ["Repeats", calc.task.repeats],
-          ["Cross-file repeats", calc.task.crossFileRepeats],
-          ["Total words", calc.totalWords],
-          ["Cost per word (RUB)", calc.task.costPerWord],
-          ["Repeat discount (%)", calc.task.repeatDiscount],
-          ["Cost per repeat (RUB)", calc.costPerRepeat],
-          ["Words per day", calc.task.wordsPerDay],
+          ["Параметр", "Значение"],
+          ["Новых слов", calc.task.newWords],
+          ["Повторов", calc.task.repeats],
+          ["Повторов через файл", calc.task.crossFileRepeats],
+          ["Всего слов", calc.totalWords],
+          ["Стоимость за слово (руб.)", calc.task.costPerWord],
+          ["Скидка на повторы (%)", calc.task.repeatDiscount],
+          ["Стоимость за повтор (руб.)", calc.costPerRepeat],
+          ["Слов в день", calc.task.wordsPerDay],
           [],
-          ["Calculations"],
-          ["New words cost (RUB)", calc.newWordsCost],
-          ["Repeats cost (RUB)", calc.repeatCost],
-          ["Total cost (RUB)", calc.totalCost],
-          ["Deadline", calc.requiresIndividualQuote ? "Individual calculation" : `${calc.estimatedDays} days`],
+          ["Расчеты"],
+          ["Стоимость новых слов (руб.)", calc.newWordsCost],
+          ["Стоимость повторов (руб.)", calc.repeatCost],
+          ["Итоговая стоимость (руб.)", calc.totalCost],
+          ["Сроки", calc.requiresIndividualQuote ? "Рассчитывается индивидуально" : `${calc.estimatedDays} дней`],
         ];
         
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         
-        ws["!cols"] = [{ wch: 25 }, { wch: 20 }];
+        ws["!cols"] = [{ wch: 30 }, { wch: 25 }];
         
-        const sheetName = calc.task.name.substring(0, 31);
+        const sheetName = calc.task.name.substring(0, 31).replace(/[\\/?*[\]]/g, "-");
         XLSX.utils.book_append_sheet(workbook, ws, sheetName);
       });
       
       if (summary.tasks.length > 1) {
         const summaryData = [
-          ["Summary"],
+          ["Общий итог"],
           [],
-          ["Task", "Words", "Cost (RUB)", "Deadline"],
+          ["Задание", "Слов", "Стоимость (руб.)", "Сроки"],
           ...summary.tasks.map((calc) => [
             calc.task.name,
             calc.totalWords,
             calc.totalCost,
-            calc.requiresIndividualQuote ? "Individual" : `${calc.estimatedDays} days`,
+            calc.requiresIndividualQuote ? "Индивидуально" : `${calc.estimatedDays} дней`,
           ]),
           [],
-          ["TOTAL", summary.totalWords, summary.grandTotal, ""],
+          ["ИТОГО", summary.totalWords, summary.grandTotal, ""],
         ];
         
         const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-        summaryWs["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
-        XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
+        summaryWs["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 18 }];
+        XLSX.utils.book_append_sheet(workbook, summaryWs, "Итог");
       }
       
       const excelBuffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
       
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", 'attachment; filename="translation-calculation.xlsx"');
+      res.setHeader("Content-Disposition", 'attachment; filename="raschet-perevoda.xlsx"');
       res.send(excelBuffer);
     } catch (error) {
       console.error("Excel export error:", error);
