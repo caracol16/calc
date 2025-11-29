@@ -1,18 +1,92 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+export const languagePairs = [
+  { value: "en-ru", label: "Английский → Русский" },
+  { value: "ru-en", label: "Русский → Английский" },
+  { value: "de-ru", label: "Немецкий → Русский" },
+  { value: "ru-de", label: "Русский → Немецкий" },
+  { value: "fr-ru", label: "Французский → Русский" },
+  { value: "ru-fr", label: "Русский → Французский" },
+  { value: "es-ru", label: "Испанский → Русский" },
+  { value: "ru-es", label: "Русский → Испанский" },
+  { value: "it-ru", label: "Итальянский → Русский" },
+  { value: "ru-it", label: "Русский → Итальянский" },
+  { value: "zh-ru", label: "Китайский → Русский" },
+  { value: "ru-zh", label: "Русский → Китайский" },
+] as const;
+
+export type LanguagePairValue = typeof languagePairs[number]["value"];
+
+export const taskSchema = z.object({
+  id: z.string(),
+  languagePair: z.string(),
+  newWords: z.number().min(0),
+  repeats: z.number().min(0),
+  crossFileRepeats: z.number().min(0),
+  costPerWord: z.number().min(0),
+  repeatDiscount: z.number().min(0).max(100),
+  wordsPerDay: z.number().min(1),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
+export type Task = z.infer<typeof taskSchema>;
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export const insertTaskSchema = taskSchema.omit({ id: true });
+export type InsertTask = z.infer<typeof insertTaskSchema>;
+
+export interface TaskCalculation {
+  task: Task;
+  totalWords: number;
+  newWordsCost: number;
+  repeatCost: number;
+  totalRepeats: number;
+  costPerRepeat: number;
+  totalCost: number;
+  estimatedDays: number | null;
+  requiresIndividualQuote: boolean;
+}
+
+export interface CalculationSummary {
+  tasks: TaskCalculation[];
+  grandTotal: number;
+  totalWords: number;
+}
+
+export function calculateTask(task: Task): TaskCalculation {
+  const totalWords = task.newWords + task.repeats + task.crossFileRepeats;
+  const newWordsCost = task.newWords * task.costPerWord;
+  const costPerRepeat = task.costPerWord * (task.repeatDiscount / 100);
+  const totalRepeats = task.repeats + task.crossFileRepeats;
+  const repeatCost = totalRepeats * costPerRepeat;
+  const totalCost = newWordsCost + repeatCost;
+  
+  const requiresIndividualQuote = totalWords > 25000;
+  let estimatedDays: number | null = null;
+  
+  if (!requiresIndividualQuote) {
+    estimatedDays = Math.ceil(totalWords / task.wordsPerDay + 1);
+  }
+  
+  return {
+    task,
+    totalWords,
+    newWordsCost,
+    repeatCost,
+    totalRepeats,
+    costPerRepeat,
+    totalCost,
+    estimatedDays,
+    requiresIndividualQuote,
+  };
+}
+
+export function calculateSummary(tasks: Task[]): CalculationSummary {
+  const calculations = tasks.map(calculateTask);
+  const grandTotal = calculations.reduce((sum, calc) => sum + calc.totalCost, 0);
+  const totalWords = calculations.reduce((sum, calc) => sum + calc.totalWords, 0);
+  
+  return {
+    tasks: calculations,
+    grandTotal,
+    totalWords,
+  };
+}
