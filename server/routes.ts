@@ -4,24 +4,9 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
-const languagePairs: Record<string, string> = {
-  "en-ru": "Английский → Русский",
-  "ru-en": "Русский → Английский",
-  "de-ru": "Немецкий → Русский",
-  "ru-de": "Русский → Немецкий",
-  "fr-ru": "Французский → Русский",
-  "ru-fr": "Русский → Французский",
-  "es-ru": "Испанский → Русский",
-  "ru-es": "Русский → Испанский",
-  "it-ru": "Итальянский → Русский",
-  "ru-it": "Русский → Итальянский",
-  "zh-ru": "Китайский → Русский",
-  "ru-zh": "Русский → Китайский",
-};
-
 interface Task {
   id: string;
-  languagePair: string;
+  name: string;
   newWords: number;
   repeats: number;
   crossFileRepeats: number;
@@ -87,11 +72,9 @@ export async function registerRoutes(
       let yPos = 40;
       
       summary.tasks.forEach((calc, index) => {
-        const langPair = languagePairs[calc.task.languagePair] || calc.task.languagePair;
-        
         doc.setFont("helvetica", "bold");
         doc.setFontSize(12);
-        doc.text(`Task ${index + 1}: ${langPair}`, 14, yPos);
+        doc.text(`${calc.task.name}`, 14, yPos);
         yPos += 8;
         
         const tableData = [
@@ -136,9 +119,8 @@ export async function registerRoutes(
         doc.text("Summary", 14, yPos);
         yPos += 8;
         
-        const summaryTableData = summary.tasks.map((calc, idx) => [
-          `Task ${idx + 1}`,
-          languagePairs[calc.task.languagePair] || calc.task.languagePair,
+        const summaryTableData = summary.tasks.map((calc) => [
+          calc.task.name,
           formatInteger(calc.totalWords),
           `${formatNumber(calc.totalCost)} RUB`,
           calc.requiresIndividualQuote ? "Indiv." : `${calc.estimatedDays} d.`,
@@ -146,7 +128,6 @@ export async function registerRoutes(
         
         summaryTableData.push([
           "TOTAL",
-          "",
           formatInteger(summary.totalWords),
           `${formatNumber(summary.grandTotal)} RUB`,
           "",
@@ -154,7 +135,7 @@ export async function registerRoutes(
         
         autoTable(doc, {
           startY: yPos,
-          head: [["Task", "Language pair", "Words", "Cost", "Deadline"]],
+          head: [["Task", "Words", "Cost", "Deadline"]],
           body: summaryTableData,
           theme: "striped",
           headStyles: { fillColor: [59, 130, 246] },
@@ -181,10 +162,8 @@ export async function registerRoutes(
       const workbook = XLSX.utils.book_new();
       
       summary.tasks.forEach((calc, index) => {
-        const langPair = languagePairs[calc.task.languagePair] || calc.task.languagePair;
-        
         const wsData = [
-          [`Task ${index + 1}: ${langPair}`],
+          [calc.task.name],
           [],
           ["Parameter", "Value"],
           ["New words", calc.task.newWords],
@@ -207,7 +186,7 @@ export async function registerRoutes(
         
         ws["!cols"] = [{ wch: 25 }, { wch: 20 }];
         
-        const sheetName = `Task ${index + 1}`.substring(0, 31);
+        const sheetName = calc.task.name.substring(0, 31);
         XLSX.utils.book_append_sheet(workbook, ws, sheetName);
       });
       
@@ -215,20 +194,19 @@ export async function registerRoutes(
         const summaryData = [
           ["Summary"],
           [],
-          ["Task", "Language pair", "Words", "Cost (RUB)", "Deadline"],
-          ...summary.tasks.map((calc, idx) => [
-            `Task ${idx + 1}`,
-            languagePairs[calc.task.languagePair] || calc.task.languagePair,
+          ["Task", "Words", "Cost (RUB)", "Deadline"],
+          ...summary.tasks.map((calc) => [
+            calc.task.name,
             calc.totalWords,
             calc.totalCost,
             calc.requiresIndividualQuote ? "Individual" : `${calc.estimatedDays} days`,
           ]),
           [],
-          ["TOTAL", "", summary.totalWords, summary.grandTotal, ""],
+          ["TOTAL", summary.totalWords, summary.grandTotal, ""],
         ];
         
         const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-        summaryWs["!cols"] = [{ wch: 15 }, { wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
+        summaryWs["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
         XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
       }
       

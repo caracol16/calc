@@ -1,25 +1,8 @@
 import { z } from "zod";
 
-export const languagePairs = [
-  { value: "en-ru", label: "Английский → Русский" },
-  { value: "ru-en", label: "Русский → Английский" },
-  { value: "de-ru", label: "Немецкий → Русский" },
-  { value: "ru-de", label: "Русский → Немецкий" },
-  { value: "fr-ru", label: "Французский → Русский" },
-  { value: "ru-fr", label: "Русский → Французский" },
-  { value: "es-ru", label: "Испанский → Русский" },
-  { value: "ru-es", label: "Русский → Испанский" },
-  { value: "it-ru", label: "Итальянский → Русский" },
-  { value: "ru-it", label: "Русский → Итальянский" },
-  { value: "zh-ru", label: "Китайский → Русский" },
-  { value: "ru-zh", label: "Русский → Китайский" },
-] as const;
-
-export type LanguagePairValue = typeof languagePairs[number]["value"];
-
 export const taskSchema = z.object({
   id: z.string(),
-  languagePair: z.string(),
+  name: z.string(),
   newWords: z.number().min(0),
   repeats: z.number().min(0),
   crossFileRepeats: z.number().min(0),

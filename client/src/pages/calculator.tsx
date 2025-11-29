@@ -1,16 +1,9 @@
-import { useState, useCallback } from "react";
-import { Plus, Trash2, FileDown, FileSpreadsheet, Calculator, Languages, RefreshCw } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { Plus, Trash2, FileDown, FileSpreadsheet, Calculator, RefreshCw, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Collapsible,
   CollapsibleContent,
@@ -21,7 +14,6 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   Task,
-  languagePairs,
   calculateTask,
   calculateSummary,
   TaskCalculation,
@@ -32,15 +24,17 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 11);
 }
 
-const defaultTask: Omit<Task, "id"> = {
-  languagePair: "en-ru",
-  newWords: 0,
-  repeats: 0,
-  crossFileRepeats: 0,
-  costPerWord: 3.9,
-  repeatDiscount: 30,
-  wordsPerDay: 1750,
-};
+function createDefaultTask(index: number): Omit<Task, "id"> {
+  return {
+    name: `Задание ${index + 1}`,
+    newWords: 0,
+    repeats: 0,
+    crossFileRepeats: 0,
+    costPerWord: 3.9,
+    repeatDiscount: 30,
+    wordsPerDay: 1750,
+  };
+}
 
 function formatNumber(num: number): string {
   return new Intl.NumberFormat("ru-RU", {
@@ -51,6 +45,71 @@ function formatNumber(num: number): string {
 
 function formatInteger(num: number): string {
   return new Intl.NumberFormat("ru-RU").format(num);
+}
+
+interface EditableTitleProps {
+  value: string;
+  onChange: (value: string) => void;
+  index: number;
+}
+
+function EditableTitle({ value, onChange, index }: EditableTitleProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleSave = () => {
+    const trimmed = editValue.trim();
+    if (trimmed) {
+      onChange(trimmed);
+    } else {
+      setEditValue(value);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSave();
+    } else if (e.key === "Escape") {
+      setEditValue(value);
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <Input
+        ref={inputRef}
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={handleKeyDown}
+        className="text-xl font-semibold h-8 w-auto min-w-[150px] max-w-[300px]"
+        data-testid={`input-task-name-${index}`}
+      />
+    );
+  }
+
+  return (
+    <div 
+      className="group flex items-center gap-2 cursor-pointer"
+      onClick={() => setIsEditing(true)}
+      data-testid={`text-task-name-${index}`}
+    >
+      <CardTitle className="text-xl font-semibold group-hover:text-primary transition-colors">
+        {value}
+      </CardTitle>
+      <Pencil className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+    </div>
+  );
 }
 
 interface TaskCardProps {
@@ -64,8 +123,6 @@ interface TaskCardProps {
 
 function TaskCard({ task, index, calculation, onUpdate, onRemove, canRemove }: TaskCardProps) {
   const [tariffOpen, setTariffOpen] = useState(false);
-  
-  const languageLabel = languagePairs.find(lp => lp.value === task.languagePair)?.label || task.languagePair;
 
   return (
     <Card className="border-card-border">
@@ -75,28 +132,13 @@ function TaskCard({ task, index, calculation, onUpdate, onRemove, canRemove }: T
             <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary text-primary-foreground font-semibold text-sm">
               {index + 1}
             </div>
-            <CardTitle className="text-xl font-semibold">Задание {index + 1}</CardTitle>
+            <EditableTitle
+              value={task.name}
+              onChange={(name) => onUpdate(task.id, { name })}
+              index={index}
+            />
           </div>
           <div className="flex items-center gap-2">
-            <Select
-              value={task.languagePair}
-              onValueChange={(value) => onUpdate(task.id, { languagePair: value })}
-            >
-              <SelectTrigger 
-                className="w-[220px]" 
-                data-testid={`select-language-pair-${task.id}`}
-              >
-                <Languages className="w-4 h-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Выберите языковую пару" />
-              </SelectTrigger>
-              <SelectContent>
-                {languagePairs.map((pair) => (
-                  <SelectItem key={pair.value} value={pair.value}>
-                    {pair.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             {canRemove && (
               <Button
                 variant="ghost"
@@ -354,33 +396,24 @@ function SummaryPanel({ summary, onExportPDF, onExportExcel, isExporting }: Summ
             <thead>
               <tr className="border-b">
                 <th className="text-left py-2 px-3 font-medium">Задание</th>
-                <th className="text-left py-2 px-3 font-medium">Языковая пара</th>
                 <th className="text-right py-2 px-3 font-medium">Слов</th>
                 <th className="text-right py-2 px-3 font-medium">Стоимость</th>
                 <th className="text-right py-2 px-3 font-medium">Сроки</th>
               </tr>
             </thead>
             <tbody>
-              {summary.tasks.map((calc, idx) => {
-                const langLabel = languagePairs.find(lp => lp.value === calc.task.languagePair)?.label || calc.task.languagePair;
-                return (
-                  <tr key={calc.task.id} className="border-b border-border/50">
-                    <td className="py-2 px-3">
-                      <Badge variant="outline" className="font-mono">
-                        {idx + 1}
-                      </Badge>
-                    </td>
-                    <td className="py-2 px-3">{langLabel}</td>
-                    <td className="py-2 px-3 text-right font-mono">{formatInteger(calc.totalWords)}</td>
-                    <td className="py-2 px-3 text-right font-mono font-medium">{formatNumber(calc.totalCost)} ₽</td>
-                    <td className="py-2 px-3 text-right font-mono">
-                      {calc.requiresIndividualQuote ? "Индивид." : `${calc.estimatedDays} дн.`}
-                    </td>
-                  </tr>
-                );
-              })}
+              {summary.tasks.map((calc) => (
+                <tr key={calc.task.id} className="border-b border-border/50">
+                  <td className="py-2 px-3">{calc.task.name}</td>
+                  <td className="py-2 px-3 text-right font-mono">{formatInteger(calc.totalWords)}</td>
+                  <td className="py-2 px-3 text-right font-mono font-medium">{formatNumber(calc.totalCost)} ₽</td>
+                  <td className="py-2 px-3 text-right font-mono">
+                    {calc.requiresIndividualQuote ? "Индивид." : `${calc.estimatedDays} дн.`}
+                  </td>
+                </tr>
+              ))}
               <tr className="font-bold">
-                <td colSpan={2} className="py-2 px-3">Итого:</td>
+                <td className="py-2 px-3">Итого:</td>
                 <td className="py-2 px-3 text-right font-mono">{formatInteger(summary.totalWords)}</td>
                 <td className="py-2 px-3 text-right font-mono text-primary">{formatNumber(summary.grandTotal)} ₽</td>
                 <td className="py-2 px-3"></td>
@@ -417,14 +450,14 @@ function SummaryPanel({ summary, onExportPDF, onExportExcel, isExporting }: Summ
 export default function CalculatorPage() {
   const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([
-    { id: generateId(), ...defaultTask },
+    { id: generateId(), ...createDefaultTask(0) },
   ]);
   const [isExporting, setIsExporting] = useState(false);
 
   const summary = calculateSummary(tasks);
 
   const handleAddTask = useCallback(() => {
-    setTasks((prev) => [...prev, { id: generateId(), ...defaultTask }]);
+    setTasks((prev) => [...prev, { id: generateId(), ...createDefaultTask(prev.length) }]);
   }, []);
 
   const handleUpdateTask = useCallback((id: string, updates: Partial<Task>) => {
@@ -438,7 +471,7 @@ export default function CalculatorPage() {
   }, []);
 
   const handleReset = useCallback(() => {
-    setTasks([{ id: generateId(), ...defaultTask }]);
+    setTasks([{ id: generateId(), ...createDefaultTask(0) }]);
     toast({
       title: "Калькулятор сброшен",
       description: "Все данные очищены",
