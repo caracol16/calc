@@ -634,13 +634,6 @@ export default function CalculatorPage() {
         />
       </main>
 
-      <footer className="border-t py-6 mt-8">
-        <div className="max-w-6xl mx-auto px-4 md:px-8">
-          <p className="text-center text-sm text-muted-foreground">
-            TransCalc — Профессиональный калькулятор стоимости переводов
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }
