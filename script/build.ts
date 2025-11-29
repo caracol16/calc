@@ -17,6 +17,8 @@ const allowlist = [
   "express-rate-limit",
   "express-session",
   "jsonwebtoken",
+  "jspdf",
+  "jspdf-autotable",
   "memorystore",
   "multer",
   "nanoid",
